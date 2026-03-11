@@ -1,0 +1,89 @@
+/* L8Notify — Shared notification admin styles */
+/* Uses --layer8d-* theme tokens exclusively */
+
+/* SMTP Config */
+.l8notify-smtp-config {
+    padding: var(--layer8d-space-md);
+}
+
+.l8notify-smtp-actions {
+    display: flex;
+    gap: var(--layer8d-space-sm);
+    justify-content: flex-end;
+    margin-top: var(--layer8d-space-md);
+    padding-top: var(--layer8d-space-md);
+    border-top: 1px solid var(--layer8d-border);
+}
+
+/* Webhook Management */
+.l8notify-webhook-mgmt {
+    padding: var(--layer8d-space-md);
+}
+
+.l8notify-webhook-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--layer8d-space-md);
+}
+
+/* Delivery Log */
+.l8notify-delivery-log {
+    padding: var(--layer8d-space-md);
+}
+
+.l8notify-delivery-detail {
+    padding: var(--layer8d-space-md);
+}
+
+.l8notify-detail-row {
+    display: flex;
+    padding: var(--layer8d-space-xs) 0;
+    border-bottom: 1px solid var(--layer8d-border);
+}
+
+.l8notify-detail-row label {
+    font-weight: 600;
+    min-width: 120px;
+    color: var(--layer8d-text-medium);
+    font-size: var(--layer8d-font-sm);
+}
+
+.l8notify-detail-row span {
+    color: var(--layer8d-text-dark);
+    font-size: var(--layer8d-font-sm);
+    word-break: break-all;
+}
+
+.l8notify-detail-error span {
+    color: var(--layer8d-error);
+}
+
+/* Delivery status badge colors */
+.l8notify-status-sent {
+    color: var(--layer8d-success);
+}
+
+.l8notify-status-failed {
+    color: var(--layer8d-error);
+}
+
+.l8notify-status-pending,
+.l8notify-status-retrying {
+    color: var(--layer8d-warning);
+}
+
+/* Test button states */
+.l8notify-test-btn.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.l8notify-test-btn.success {
+    border-color: var(--layer8d-success);
+    color: var(--layer8d-success);
+}
+
+.l8notify-test-btn.error {
+    border-color: var(--layer8d-error);
+    color: var(--layer8d-error);
+}
