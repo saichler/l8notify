@@ -15,19 +15,24 @@ l8notify/
 │   └── make-bindings.sh            # Generates go/types/l8notify/l8notify.pb.go
 ├── go/
 │   ├── go.mod                      # Module: github.com/saichler/l8notify/go
+│   ├── test.sh                     # Runs all tests with coverage report
 │   ├── types/l8notify/
 │   │   └── l8notify.pb.go          # Generated proto types
 │   ├── channel/
 │   │   ├── channel.go              # Dispatch router + Sender interface + custom sender registry
 │   │   ├── email.go                # SMTP email sender (plain + TLS)
 │   │   ├── webhook.go              # Webhook sender (HMAC-SHA256 signing + retry with backoff)
-│   │   └── slack.go                # Slack incoming webhook sender
+│   │   ├── slack.go                # Slack incoming webhook sender
+│   │   └── channel_test.go         # Tests for dispatch routing and custom senders
 │   ├── template/
-│   │   └── template.go             # Generic {{key}} placeholder renderer
+│   │   ├── template.go             # Generic {{key}} placeholder renderer
+│   │   └── template_test.go        # Tests for template rendering edge cases
 │   ├── throttle/
-│   │   └── throttle.go             # Per-key cooldown + hourly rate limiter
+│   │   ├── throttle.go             # Per-key cooldown + hourly rate limiter
+│   │   └── throttle_test.go        # Tests for cooldown and hourly limits
 │   └── escalation/
-│       └── scheduler.go            # Time-based escalation chain scheduler
+│       ├── scheduler.go            # Time-based escalation chain scheduler
+│       └── scheduler_test.go       # Tests for escalation scheduling and cancellation
 ├── l8ui/notification/
 │   ├── l8notify-enums.js           # NotifyChannel + DeliveryStatus enums with renderers
 │   ├── l8notify-smtp-config.js     # SMTP configuration form component
@@ -555,6 +560,33 @@ MyModule.forms = {
 // In consumer form definitions (select dropdown)
 ...f.select('channel', 'Channel', L8NotifyEnums.NOTIFY_CHANNEL)
 ```
+
+---
+
+## Testing
+
+All four Go packages have unit tests. Run them with:
+
+```bash
+cd go && ./test.sh
+```
+
+The `test.sh` script fetches dependencies, runs all tests with `-v` and `-failfast`, collects coverage across all packages (`channel`, `template`, `throttle`, `escalation`), and opens an HTML coverage report.
+
+To run tests without the interactive prompt or coverage browser:
+
+```bash
+cd go && go test ./... -v --failfast
+```
+
+### Test Coverage
+
+| Package | Test File | Key Cases |
+|---------|-----------|-----------|
+| `channel` | `channel_test.go` | Dispatch routing per channel, custom sender registration, nil/error handling |
+| `template` | `template_test.go` | Placeholder substitution, missing keys, empty/nil inputs, `RenderWithDefault` |
+| `throttle` | `throttle_test.go` | Per-key cooldown, hourly rate limits, cross-key isolation, `Reset()` |
+| `escalation` | `scheduler_test.go` | Empty steps, single/multi-step chains, `Cancel()`, `Active()` count |
 
 ---
 
