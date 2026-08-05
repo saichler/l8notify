@@ -598,9 +598,27 @@ cd go && go test ./... -v --failfast
 | `throttle` | `throttle_test.go` | Per-key cooldown, hourly rate limits, cross-key isolation, `Reset()` |
 | `escalation` | `scheduler_test.go` | Empty steps, single/multi-step chains, `Cancel()`, `Active()` count |
 
+### Testing the `Notify`/`IntegCfg` Services
+
 `services` (`Notify`/`IntegCfg`) has no tests in this repo — per `test-location-and-approach.md`, tests for
 activatable services belong in the *consumer's* `go/tests/`, exercised through the system's HTTP API, not here.
 `l8notify` itself has no `go/tests/` directory — same exemption `l8events` takes.
+
+Recipe for the consumer's own integration test:
+
+1. Test file lives in the consumer's `go/tests/integration/notify_test.go`, not inside `l8notify`.
+2. Seed the consumer's `credentials` map with a `smtp` entry pointed at a local SMTP catcher (e.g. `smtp4dev`) —
+   see the credentials JSON shape in [Step 4 above](#step-4-set-up-credentials-deploy-time-not-code).
+3. Stand up the consumer's `IVNic`, call `ActivateNotify`/`ActivateIntegrationConfig`.
+4. `POST /<prefix>/78/IntegCfg` an SMTP `IntegrationConfig` row (`type: SMTP`, `credentialKey: "smtp"`, host/port
+   pointed at the catcher).
+5. `POST /<prefix>/78/Notify` with `channel: EMAIL`, assert `status: DELIVERY_STATUS_SENT`; `GET
+   /<prefix>/78/Notify?body=...` (L8Query `select * from NotifyRecord`) returns the delivery log; `PUT
+   /<prefix>/78/Notify` is rejected.
+
+Assert on HTTP responses only — never by calling `NotifyCallback.Before()` or `IntegrationConfigCallback.Before()`
+directly (`test-location-and-approach.md`: tests exercise the system the same way a real client would, not
+unexported internals).
 
 ---
 

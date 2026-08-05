@@ -1048,7 +1048,7 @@ result := vnic.Resources().Notify().Send(l8notifysvc.NotifyChannel_NOTIFY_CHANNE
 
 ---
 
-## Phase 7 — `l8notify`: Tests (documentation only, no code)
+## Phase 7 [DONE] — `l8notify`: Tests (documentation only, no code)
 
 **Repo**: `l8notify`
 **Prerequisites**: same as Phase 6 — most accurate once Phase 3/4 exist, but doesn't block on them to write.
