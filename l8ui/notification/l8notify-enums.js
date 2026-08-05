@@ -4,20 +4,20 @@
     const { createStatusRenderer, renderEnum } = Layer8DRenderers;
 
     const NOTIFY_CHANNEL = Layer8EnumFactory.create([
-        { value: 0, label: 'Unspecified' },
-        { value: 1, label: 'Email' },
-        { value: 2, label: 'Webhook' },
-        { value: 3, label: 'Slack' },
-        { value: 4, label: 'PagerDuty' },
-        { value: 5, label: 'Custom' }
+        ['Unspecified', null, ''],
+        ['Email', 'email', ''],
+        ['Webhook', 'webhook', ''],
+        ['Slack', 'slack', ''],
+        ['PagerDuty', 'pagerduty', ''],
+        ['Custom', 'custom', '']
     ]);
 
     const DELIVERY_STATUS = Layer8EnumFactory.create([
-        { value: 0, label: 'Unspecified' },
-        { value: 1, label: 'Pending' },
-        { value: 2, label: 'Sent' },
-        { value: 3, label: 'Failed' },
-        { value: 4, label: 'Retrying' }
+        ['Unspecified', null, ''],
+        ['Pending', 'pending', ''],
+        ['Sent', 'sent', ''],
+        ['Failed', 'failed', ''],
+        ['Retrying', 'retrying', '']
     ]);
 
     const DELIVERY_STATUS_CLASSES = {

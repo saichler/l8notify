@@ -246,7 +246,7 @@ l8events/ (Phase 0.5b)
 
 ---
 
-## Phase 0 — `l8types`: migrate `l8notify`'s types, add `INotify`/`IIntegration`
+## Phase 0 [DONE] — `l8types`: migrate `l8notify`'s types, add `INotify`/`IIntegration`
 
 **Repo**: `l8types`
 **Prerequisites**: none — this is the first phase, and it's self-contained within `l8types`.
@@ -460,7 +460,7 @@ modified (`Resources.go`)
 
 ---
 
-## Phase 0.25 — `l8utils`: default `INotify`/`IIntegration` implementations
+## Phase 0.25 [DONE] — `l8utils`: default `INotify`/`IIntegration` implementations
 
 **Repo**: `l8utils`
 **Prerequisites**: Phase 0 pushed; `l8utils/go.mod` bumped to require the `l8types` version containing
@@ -617,7 +617,7 @@ already use — verify the exact import path against `l8common/go/common/service
 
 ---
 
-## Phase 0.5a — `l8common`: consolidate shared activation/ID/HMAC helpers
+## Phase 0.5a [DONE] — `l8common`: consolidate shared activation/ID/HMAC helpers
 
 **Repo**: `l8common`
 **Prerequisites**: none — independent of Phase 0/0.25 (doesn't reference any `l8notify`/`l8notifysvc` type), can
@@ -688,7 +688,7 @@ func VerifyHMACSHA256Hex(payload []byte, signatureHex, secret string) bool
 
 ---
 
-## Phase 0.5b — `l8events`: migrate onto the consolidated `l8common` helpers
+## Phase 0.5b [DONE] — `l8events`: migrate onto the consolidated `l8common` helpers
 
 **Repo**: `l8events`
 **Prerequisites**: Phase 0.5a pushed; `l8events/go.mod` bumped to require the new `l8common` version.
@@ -736,7 +736,7 @@ produces no independent deliverable and needs no session of its own.**
 
 ---
 
-## Phase 3 — `l8notify`: `go/services/IntegrationConfigService.go`
+## Phase 3 [DONE] — `l8notify`: `go/services/IntegrationConfigService.go`
 
 **Repo**: `l8notify`
 **Prerequisites**: Phase 0 pushed + `l8notify/go.mod` bumped to require the new `l8types` (for `l8notifysvc` types);
@@ -791,13 +791,18 @@ no-op cleanup — see Phase 1 above).
 
 ---
 
-## Phase 4 — `l8notify`: `go/services/NotifyRecordService.go`
+## Phase 4 [DONE] — `l8notify`: `go/services/NotifyRecordService.go`
 
 **Repo**: `l8notify`
 **Prerequisites**: same as Phase 3 — Phase 0 and Phase 0.5a pushed and vendored into `l8notify/go.mod`. No ordering
 dependency on Phase 3 itself (different files, no shared code beyond both reading `NotifyServiceArea` — declare
 that constant once, in whichever of Phase 3/4 lands first, and reference it from the other). Phase 0.25/0.5b are
 not required to compile this phase, only for end-to-end runtime testing (Phase 8).
+
+**Phase 3 already landed and already declared `NotifyServiceArea = byte(78)`** in
+`go/services/IntegrationConfigService.go` (same `services` package). **Do NOT redeclare it here** — a second
+`const NotifyServiceArea = ...` in the same package is a compile error. Reference the existing constant instead;
+only declare `NotifyServiceName = "Notify"` in this file.
 
 The core service — persists `NotifyRecord` **and** dispatches on `POST`, via `l8common.ActivateService`. Includes
 what earlier drafts of this plan called "Phase 3" (config resolution) as subsections 4.1/4.2 below — they only ever
@@ -811,7 +816,7 @@ import (
 
 const (
     NotifyServiceName = "Notify"
-    NotifyServiceArea = byte(78)
+    // NotifyServiceArea is declared in IntegrationConfigService.go — do not redeclare it here.
 )
 // L8Query `from` clause uses the protobuf type name "NotifyRecord", NOT the ServiceName "Notify".
 
@@ -1021,6 +1026,17 @@ non-secret routing data (host, port, URL, etc.) is entered through the admin UI 
   "ops-alerts": { "zside": "hmac-secret-value" }
 }
 ```
+
+**Discrepancy found during Phase 4 — verify before finalizing this section.** `NotifyRecordService.go`'s
+`resolveSmtpConfig` was implemented against `l8common.ActivateService`'s own DB-credential resolution, the only
+*verified, working* `Security().Credential()` call site available (`OpenDBConection` confirmed it builds
+`user=%s password=%s` from the 2nd/3rd return values). That pattern is `_, user, pass, _, err :=
+Credential(key, type, resources)` — i.e. **2nd return (`zside`) = username, 3rd return (`yside`) = password**. The
+JSON example above (`aside` = username, `zside` = password) uses the *opposite* mapping for the `smtp` entry and was
+never independently verified — it's this plan's own illustrative guess, not tested code. The `ops-alerts` entry
+(`zside` = the one-and-only secret) doesn't conflict either way. Before writing this section for real, confirm
+which mapping the consumer's actual `ISecurityProvider` implementation uses for JSON key → return-position, and fix
+either the JSON example or `resolveSmtpConfig` — do not assume they already agree.
 
 ### 6.4 Any-service dispatch via `INotify`
 ```go

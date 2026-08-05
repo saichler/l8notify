@@ -3,7 +3,7 @@ package escalation
 import (
 	"fmt"
 	"github.com/saichler/l8notify/go/template"
-	ntf "github.com/saichler/l8notify/go/types/l8notify"
+	ntf "github.com/saichler/l8types/go/types/l8notifysvc"
 	"sort"
 	"sync"
 	"time"

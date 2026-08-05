@@ -2,11 +2,9 @@ package channel
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	ntf "github.com/saichler/l8notify/go/types/l8notify"
+	common "github.com/saichler/l8common/go/common"
+	ntf "github.com/saichler/l8types/go/types/l8notifysvc"
 	"io"
 	"net/http"
 	"time"
@@ -93,9 +91,7 @@ func doWebhookPost(url, body, secret string, timeoutMs, attempt int32) *ntf.Deli
 	req.Header.Set("Content-Type", "application/json")
 
 	if secret != "" {
-		mac := hmac.New(sha256.New, []byte(secret))
-		mac.Write([]byte(body))
-		sig := hex.EncodeToString(mac.Sum(nil))
+		sig := common.ComputeHMACSHA256([]byte(body), secret)
 		req.Header.Set(signatureHeader, sig)
 	}
 
