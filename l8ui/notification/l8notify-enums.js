@@ -28,12 +28,23 @@
         4: 'status-warning'
     };
 
+    const INTEGRATION_TYPE = Layer8EnumFactory.create([
+        ['Unspecified', null, ''],
+        ['SMTP', 'smtp', ''],
+        ['Webhook', 'webhook', ''],
+        ['Slack', 'slack', ''],
+        ['PagerDuty', 'pagerduty', ''],
+        ['Custom', 'custom', '']
+    ]);
+
     window.L8NotifyEnums = {
         NOTIFY_CHANNEL: NOTIFY_CHANNEL,
         DELIVERY_STATUS: DELIVERY_STATUS,
+        INTEGRATION_TYPE: INTEGRATION_TYPE,
         render: {
             channel: (value) => renderEnum(value, NOTIFY_CHANNEL.enum),
-            deliveryStatus: createStatusRenderer(DELIVERY_STATUS.enum, DELIVERY_STATUS_CLASSES)
+            deliveryStatus: createStatusRenderer(DELIVERY_STATUS.enum, DELIVERY_STATUS_CLASSES),
+            integrationType: (value) => renderEnum(value, INTEGRATION_TYPE.enum)
         }
     };
 })();

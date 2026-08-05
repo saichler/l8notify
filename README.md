@@ -1,8 +1,13 @@
 # l8notify
 
-Shared notification library for Layer 8 applications. Provides reusable Go packages and l8ui components for notification delivery, template rendering, throttling, and escalation scheduling.
+Notification library and system service for Layer 8 applications. Provides reusable Go packages (dispatch, template
+rendering, throttling, escalation scheduling) **and** an activatable backend service — `Notify` (delivery log,
+dispatches on `POST`) and `IntegCfg` (editable integration endpoint configuration) — plus l8ui components for the
+admin UI, following the same shape as `l8events`.
 
-l8notify is a **library**, not a standalone service. Consumer projects (l8alarms, l8erp, etc.) import the Go packages and copy the l8ui components into their own web directories.
+l8notify is **not** a standalone binary — it has no `main.go`, no Dockerfile, no k8s manifests. Consumer projects
+import its Go packages, activate its two services from their own backend `main.go`, and copy its l8ui components
+into their own web directories.
 
 ---
 
@@ -10,18 +15,13 @@ l8notify is a **library**, not a standalone service. Consumer projects (l8alarms
 
 ```
 l8notify/
-├── proto/
-│   ├── l8notify.proto              # Shared protobuf types
-│   └── make-bindings.sh            # Generates go/types/l8notify/l8notify.pb.go
 ├── go/
 │   ├── go.mod                      # Module: github.com/saichler/l8notify/go
 │   ├── test.sh                     # Runs all tests with coverage report
-│   ├── types/l8notify/
-│   │   └── l8notify.pb.go          # Generated proto types
 │   ├── channel/
 │   │   ├── channel.go              # Dispatch router + Sender interface + custom sender registry
 │   │   ├── email.go                # SMTP email sender (plain + TLS)
-│   │   ├── webhook.go              # Webhook sender (HMAC-SHA256 signing + retry with backoff)
+│   │   ├── webhook.go              # Webhook sender (HMAC-SHA256 signing via l8common + retry with backoff)
 │   │   ├── slack.go                # Slack incoming webhook sender
 │   │   └── channel_test.go         # Tests for dispatch routing and custom senders
 │   ├── template/
@@ -30,80 +30,47 @@ l8notify/
 │   ├── throttle/
 │   │   ├── throttle.go             # Per-key cooldown + hourly rate limiter
 │   │   └── throttle_test.go        # Tests for cooldown and hourly limits
-│   └── escalation/
-│       ├── scheduler.go            # Time-based escalation chain scheduler
-│       └── scheduler_test.go       # Tests for escalation scheduling and cancellation
+│   ├── escalation/
+│   │   ├── scheduler.go            # Time-based escalation chain scheduler
+│   │   └── scheduler_test.go       # Tests for escalation scheduling and cancellation
+│   └── services/
+│       ├── IntegrationConfigService.go  # ActivateIntegrationConfig() — editable CRUD for IntegrationConfig
+│       └── NotifyRecordService.go       # ActivateNotify() — persists NotifyRecord, dispatches on POST
 ├── l8ui/notification/
-│   ├── l8notify-enums.js           # NotifyChannel + DeliveryStatus enums with renderers
-│   ├── l8notify-smtp-config.js     # SMTP configuration form component
-│   ├── l8notify-webhook-mgmt.js    # Webhook endpoint CRUD (table + form)
-│   ├── l8notify-delivery-log.js    # Delivery log viewer (table + detail popup)
-│   ├── l8notify-target-editor.js   # Inline table definition for NotifyTarget arrays
-│   └── l8notify-notification.css   # Shared styles using --layer8d-* theme tokens
+│   ├── l8notify-enums.js               # NotifyChannel + DeliveryStatus + IntegrationType enums with renderers
+│   ├── l8notify-integration-mgmt.js    # IntegrationConfig CRUD component (columns + form, data-only)
+│   ├── l8notify-delivery-log.js        # Delivery log viewer (columns + form, data-only, read-only)
+│   ├── l8notify-target-editor.js       # Inline table definition for NotifyTarget arrays
+│   └── l8notify-notification.css       # Shared styles using --layer8d-* theme tokens
 └── plans/                          # Implementation plans
 ```
 
+Shared proto types (`NotifyChannel`, `DeliveryStatus`, `IntegrationType`, `NotifyTarget`, `SmtpConfig`,
+`WebhookConfig`, `DeliveryResult`, `EscalationStep`, `NotifyRecord`, `IntegrationConfig`) live in
+**`l8types/go/types/l8notifysvc`**, not in this repo — l8notify has no `proto/` directory of its own. This avoided
+a naming collision with `l8types/go/types/l8notify`, an unrelated, pre-existing framework package (the internal
+service change-notification mechanism).
+
 ---
 
-## Protobuf Types
+## Protobuf Types (`l8types/go/types/l8notifysvc`)
 
-All types are shared building blocks embedded in consumer-specific types. None are Prime Objects — they have no services or List wrappers.
+| Type | Kind | Purpose |
+|------|------|---------|
+| `NotifyChannel` | Enum | EMAIL, WEBHOOK, SLACK, PAGERDUTY, CUSTOM |
+| `DeliveryStatus` | Enum | PENDING, SENT, FAILED, RETRYING |
+| `IntegrationType` | Enum | SMTP, WEBHOOK, SLACK, PAGERDUTY, CUSTOM |
+| `NotifyTarget` | Embedded/child | Delivery target (channel + endpoint + template) |
+| `SmtpConfig` | Embedded/child | SMTP connection settings (resolved at dispatch time, never persisted with secrets) |
+| `WebhookConfig` | Embedded/child | Webhook endpoint with HMAC secret, retry count, timeout |
+| `DeliveryResult` | Embedded/child | Result of a delivery attempt (status, HTTP code, error, attempt #) |
+| `EscalationStep` | Embedded/child | Single step in an escalation chain (delay, channel, endpoint, template) |
+| **`NotifyRecord`** | **Prime Object** | Immutable delivery-log row. `POST` triggers real dispatch, then persists the outcome. `PUT` is rejected. |
+| **`IntegrationConfig`** | **Prime Object** | A configured integration endpoint (SMTP server, webhook, Slack, ...). Fully editable — created/updated/deleted by an admin. Non-secret fields only; `credential_key` is a lookup key into the consumer's own security config JSON `credentials` map, never the secret itself. |
 
-| Type | Purpose |
-|------|---------|
-| `NotifyChannel` | Enum: EMAIL, WEBHOOK, SLACK, PAGERDUTY, CUSTOM |
-| `DeliveryStatus` | Enum: PENDING, SENT, FAILED, RETRYING |
-| `NotifyTarget` | Delivery target (channel + endpoint + template) |
-| `SmtpConfig` | SMTP connection settings |
-| `WebhookConfig` | Webhook endpoint with HMAC secret, retry count, timeout |
-| `DeliveryResult` | Result of a delivery attempt (status, HTTP code, error, attempt #) |
-| `EscalationStep` | Single step in an escalation chain (delay, channel, endpoint, template) |
-
-### Embedding l8notify Types in Consumer Protos
-
-Consumer projects import l8notify types into their own proto files and embed them in their own policy/rule types. The consumer proto owns the policy structure; l8notify provides the building blocks.
-
-```protobuf
-syntax = "proto3";
-package myproject;
-import "l8notify.proto";  // import the shared types
-
-// Consumer-specific notification rule with project-specific filter criteria
-message NotificationRule {
-  string rule_id = 1;
-  string name = 2;
-  bool enabled = 3;
-
-  // Project-specific filter criteria (what triggers the notification)
-  string module_filter = 10;          // e.g., "sales", "inventory"
-  string event_type_filter = 11;      // e.g., "order_created", "stock_low"
-  int32 severity_filter = 12;         // consumer decides what this means
-
-  // Embedded l8notify types (shared building blocks)
-  repeated l8notify.NotifyTarget targets = 20;   // where to send
-  int32 cooldown_seconds = 21;                    // throttle config
-  int32 max_per_hour = 22;                        // throttle config
-
-  // Consumer manages persistence — l8notify does not store anything
-}
-
-// Consumer-specific escalation policy
-message EscalationPolicy {
-  string policy_id = 1;
-  string name = 2;
-  string entity_type = 3;            // what entity this applies to
-  repeated l8notify.EscalationStep steps = 10;  // shared escalation steps
-}
-
-// Consumer stores SMTP config in their own service
-message ProjectSettings {
-  string settings_id = 1;
-  l8notify.SmtpConfig smtp_config = 10;
-  repeated l8notify.WebhookConfig webhook_configs = 11;
-}
-```
-
-**Key point**: l8notify never persists anything. The consumer project stores policies, rules, SMTP configs, webhook configs, and delivery logs in its own services. l8notify only provides the types and the runtime behavior (dispatch, throttle, escalate).
+`NotifyRecord` and `IntegrationConfig` are both served by `l8notify`'s own two services (below) — they are **not**
+embedded into consumer protos the way the child types are. Everything else in the table stays a plain
+building-block type consumers can embed in their own policy/rule protos, exactly as before.
 
 ---
 
@@ -113,14 +80,81 @@ message ProjectSettings {
 
 ```bash
 cd go
-# Add l8notify to go.mod
 GOPROXY=direct GOPRIVATE=github.com go get github.com/saichler/l8notify/go@latest
 go mod vendor
 ```
 
-After vendoring, l8notify code is at `go/vendor/github.com/saichler/l8notify/go/`.
+### Step 2: Activate the Services
 
-### Step 2: Import Packages
+**Both calls below must run in exactly one process within a given consumer project** — same constraint
+`evtservices.ActivateEvents` already relies on (`single-owner-database-table.md`). Activating either service on
+more than one node causes divergent in-memory caches and silently stale data.
+
+```go
+import notifyservices "github.com/saichler/l8notify/go/services"
+
+// In your backend main.go, after services.ActivateAllServices(...):
+notifyservices.ActivateNotify(dbcred, dbname, nic)
+notifyservices.ActivateIntegrationConfig(dbcred, dbname, nic)
+```
+
+`Notify` (ServiceArea 78) persists `NotifyRecord` and dispatches on `POST`. `IntegCfg` (same ServiceArea 78) owns
+CRUD for `IntegrationConfig`. Both go through `l8common.ActivateService`, so both automatically expose
+`POST`/`PUT`/`PATCH`/`DELETE`/`GET` web endpoints at `/<prefix>/78/Notify` and `/<prefix>/78/IntegCfg` — the
+respective `*ServiceCallback`s reject the operations that don't apply (`NotifyRecord` rejects `PUT`;
+`IntegrationConfig` accepts everything).
+
+### Step 3: Register Types in Your UI `main.go`
+
+```go
+import (
+    l8c "github.com/saichler/l8common/go/common"
+    "github.com/saichler/l8types/go/types/l8notifysvc"
+)
+
+l8c.RegisterType(resources, &l8notifysvc.NotifyRecord{}, &l8notifysvc.NotifyRecordList{}, "NotifyId")
+l8c.RegisterType(resources, &l8notifysvc.IntegrationConfig{}, &l8notifysvc.IntegrationConfigList{}, "IntegrationId")
+```
+
+### Step 4: Set Up Credentials (deploy-time, not code)
+
+The consumer's own security config JSON `credentials` map gets one entry per integration's secret. The non-secret
+routing data (host, port, URL, retry count, etc.) is entered through the admin UI (`L8NotifyIntegrationMgmt`, see
+below) as regular `IntegrationConfig` rows — never as deploy-time config.
+
+```json
+"credentials": {
+  "smtp": { "zside": "smtp-username", "yside": "smtp-password" },
+  "ops-alerts": { "zside": "hmac-secret-value" }
+}
+```
+
+`Security().Credential(name, type, resources)` returns `(aside, zside, yside, name, err)`.
+`NotifyRecordService.go`'s `resolveSmtpConfig`/`resolveWebhookSecrets` read `zside` as the username (or the whole
+secret, for a single-value webhook credential) and `yside` as the password — the same destructuring pattern
+`l8common.ActivateService` itself uses for DB credentials, verified directly against `OpenDBConection`. `aside` and
+`name` (4th return) are unused for these two credential types.
+
+### Step 5: Dispatch From Any Service
+
+Any service in the ecosystem — not just consumers of `l8notify`'s own admin UI — can send a notification through
+`IResources`, mirroring `Events().PostSystemEvent(...)`:
+
+```go
+result := vnic.Resources().Notify().Send(
+    l8notifysvc.NotifyChannel_NOTIFY_CHANNEL_EMAIL,
+    "user@example.com", "Order Confirmed", "Your order SO-001 has shipped.",
+    nil, // attributes, forwarded onto the persisted NotifyRecord
+)
+```
+
+This POSTs a `NotifyRecord` to the `Notify` service over the vnic and returns the resolved `*DeliveryResult`
+synchronously (unlike `Events`, which is fire-and-forget — `Send` needs the dispatch outcome back).
+
+### Alternative: Direct Package Use (no service, no persistence)
+
+The underlying `channel`/`template`/`throttle`/`escalation` packages are still plain Go libraries — usable directly
+without activating either service, e.g. for a policy-evaluation flow where the consumer manages its own persistence:
 
 ```go
 import (
@@ -128,13 +162,9 @@ import (
     "github.com/saichler/l8notify/go/template"
     "github.com/saichler/l8notify/go/throttle"
     "github.com/saichler/l8notify/go/escalation"
-    ntf "github.com/saichler/l8notify/go/types/l8notify"
+    ntf "github.com/saichler/l8types/go/types/l8notifysvc"
 )
 ```
-
-### Step 3: Wire Up in ServiceCallback
-
-The typical integration point is a ServiceCallback `After()` hook. When an entity is created/updated/deleted, the callback evaluates notification rules and dispatches via l8notify.
 
 ```go
 // In your ServiceCallback After() method:
@@ -150,44 +180,50 @@ func (cb *MyServiceCallback) evaluateNotificationRules(entity *myproject.MyEntit
     rules := cb.loadMatchingRules(entity)
 
     for _, rule := range rules {
-        // 2. Build template variables from your entity (consumer responsibility)
         vars := map[string]string{
-            "entityId":   entity.Id,
-            "name":       entity.Name,
-            "status":     entity.Status.String(),
-            "actionType": actionLabel(action),
+            "entityId": entity.Id, "name": entity.Name,
+            "status": entity.Status.String(), "actionType": actionLabel(action),
         }
 
-        // 3. For each target on the rule, render + throttle + dispatch
         for _, target := range rule.Targets {
             throttleKey := entity.Id + "+" + rule.RuleId
             groupKey := rule.RuleId
-
             if cb.throttler.IsThrottled(throttleKey, groupKey, rule.CooldownSeconds, rule.MaxPerHour) {
                 continue
             }
 
-            // Render the target's template with entity variables
             msg := template.Render(target.Template, vars)
-
-            // Dispatch via the appropriate channel
             result := channel.Dispatch(target, msg, cb.smtpCfg, cb.webhookSecrets)
 
-            // Record the send for throttling
             if result.Status == ntf.DeliveryStatus_DELIVERY_STATUS_SENT {
                 cb.throttler.Record(throttleKey, groupKey)
             }
-
-            // Log the delivery result (consumer responsibility — store in your service)
             cb.logDeliveryResult(rule.RuleId, target, result)
         }
     }
 }
 ```
 
+Prefer `vnic.Resources().Notify().Send(...)` (Step 5) for anything that should show up in the shared delivery log —
+this direct-package path is for consumers that need their own bespoke persistence/policy model instead.
+
 ---
 
 ## Go Package API Reference
+
+### services — Activatable Backend Services
+
+```go
+import "github.com/saichler/l8notify/go/services"
+```
+
+| Function | Service | ServiceArea | PrimaryKey | Notes |
+|----------|---------|-------------|-----------|-------|
+| `ActivateNotify(creds, dbname, vnic)` | `Notify` | 78 | `NotifyId` | Dispatches on `POST` (`Before` hook), immutable (`PUT` rejected) |
+| `ActivateIntegrationConfig(creds, dbname, vnic)` | `IntegCfg` | 78 | `IntegrationId` | Fully editable CRUD |
+
+L8Query `from` clauses use the **protobuf type name** (`NotifyRecord`, `IntegrationConfig`), not the ServiceName
+(`Notify`, `IntegCfg`) — e.g. `select * from NotifyRecord where status=2`.
 
 ### channel — Notification Dispatch
 
@@ -230,7 +266,8 @@ func SendEmail(
 
 #### SendWebhook
 
-Posts JSON to a webhook endpoint with HMAC-SHA256 signing and retry with exponential backoff.
+Posts JSON to a webhook endpoint with HMAC-SHA256 signing (via `l8common.ComputeHMACSHA256`) and retry with
+exponential backoff.
 
 ```go
 func SendWebhook(
@@ -261,7 +298,8 @@ func SendSlack(webhookURL, message string) *ntf.DeliveryResult
 
 #### RegisterCustomSender / Sender Interface
 
-Extend dispatch with custom channels. Consumer registers at startup; Dispatch tries all registered senders for `NOTIFY_CHANNEL_CUSTOM`.
+Extend dispatch with custom channels. Consumer registers at startup; Dispatch tries all registered senders for
+`NOTIFY_CHANNEL_CUSTOM`.
 
 ```go
 type Sender interface {
@@ -342,9 +380,13 @@ func (t *Throttler) Reset()
 import "github.com/saichler/l8notify/go/escalation"
 ```
 
+Unchanged from before this transformation — stays a plain in-memory library, exactly like `l8events` leaves
+`state`/`archive`/`maintenance` as plain libraries. Out of scope for the system-service migration.
+
 #### StepHandler
 
-Callback type invoked when an escalation step fires. The consumer implements this to perform the actual delivery (look up SMTP config, call `channel.Dispatch`, log the result, etc.).
+Callback type invoked when an escalation step fires. The consumer implements this to perform the actual delivery
+(look up SMTP config, call `channel.Dispatch`, log the result, etc.).
 
 ```go
 type StepHandler func(entityID string, step *ntf.EscalationStep, message string) error
@@ -360,7 +402,9 @@ func New(handler StepHandler) *Scheduler
 
 #### Schedule
 
-Starts an escalation chain for the given entity. Steps are sorted by `StepOrder` automatically. Each step fires after its `DelayMinutes` via a goroutine timer. The step's `MessageTemplate` is rendered using `template.Render(tmpl, vars)` before calling the handler.
+Starts an escalation chain for the given entity. Steps are sorted by `StepOrder` automatically. Each step fires
+after its `DelayMinutes` via a goroutine timer. The step's `MessageTemplate` is rendered using
+`template.Render(tmpl, vars)` before calling the handler.
 
 If an escalation is already active for this entity, it is cancelled and replaced.
 
@@ -374,7 +418,8 @@ func (s *Scheduler) Schedule(
 
 #### Cancel
 
-Stops all pending escalation timers for the entity. Call this when the entity is acknowledged, resolved, or deleted.
+Stops all pending escalation timers for the entity. Call this when the entity is acknowledged, resolved, or
+deleted.
 
 ```go
 func (s *Scheduler) Cancel(entityID string)
@@ -392,51 +437,19 @@ func (s *Scheduler) Active() int
 
 ## Consumer Responsibilities
 
-l8notify provides the delivery infrastructure. The consumer project is responsible for everything else:
-
 | Responsibility | l8notify | Consumer |
 |----------------|----------|----------|
-| Protobuf types for targets, channels, delivery results | Provides | Embeds in own types |
-| Policy/rule types with filter criteria | -- | Defines and persists |
-| SMTP config storage | Provides `SmtpConfig` struct | Stores in own service |
-| Webhook config storage | Provides `WebhookConfig` struct | Stores in own service |
-| Delivery result logging | Returns `DeliveryResult` | Stores in own service |
+| `NotifyRecord`/`IntegrationConfig` persistence | **Provides** (`Notify`/`IntegCfg` services) | Activates both once, in one process |
+| SMTP/webhook secret storage | Never stores secrets | Own security config JSON `credentials` map |
+| Delivery dispatch + logging | **Provides** (`Notify.Before(POST)` + `channel.Dispatch`) | -- |
+| Admin UI for integration config | Provides `L8NotifyIntegrationMgmt` | Wires into `Layer8DTable`/`Layer8DForms` CRUD |
+| Delivery log viewer | Provides `L8NotifyDeliveryLog` | Wires into `Layer8DTable` + `Layer8DForms.openViewForm` |
+| Policy/rule types with filter criteria | -- | Defines and persists, embeds `NotifyTarget`/`EscalationStep` |
 | Template rendering | `template.Render()` | Builds vars map from entity fields |
-| Channel dispatch | `channel.Dispatch()` | Calls it with target + message |
-| Throttling | `throttle.IsThrottled/Record()` | Holds `*Throttler` instance, defines keys |
+| Throttling | `throttle.IsThrottled/Record()` | Holds `*Throttler` instance, defines keys (opt-in, not wired into the `Notify` service) |
 | Escalation scheduling | `escalation.Schedule/Cancel()` | Holds `*Scheduler` instance, provides `StepHandler` |
-| Event emission (when to notify) | -- | ServiceCallback After() hooks |
-| Policy matching (which rules apply) | -- | Filter logic in callback |
+| Event emission (when to notify) | -- | ServiceCallback `After()` hooks, or direct `Notify().Send(...)` calls |
 | Custom channels | `RegisterCustomSender()` | Implements `Sender` interface |
-| Admin UI for SMTP/webhooks | Provides l8ui components | Embeds in admin pages |
-| Notification rule UI | Provides target editor | Builds rule form with project-specific filters |
-
----
-
-## End-to-End Flow
-
-This is the typical notification flow in a consumer project:
-
-```
-1. Entity event (POST/PUT/DELETE)
-   └─ ServiceCallback.After() fires
-
-2. Load matching rules
-   └─ Consumer queries own NotificationRule service
-   └─ Filter by module, event type, severity, etc. (consumer-specific)
-
-3. For each matching rule, for each target:
-   ├─ Build template vars from entity fields       → consumer
-   ├─ Check throttle                                → throttle.IsThrottled()
-   ├─ Render message template                       → template.Render(target.Template, vars)
-   ├─ Dispatch to channel                           → channel.Dispatch(target, msg, smtp, secrets)
-   ├─ Record throttle on success                    → throttle.Record()
-   └─ Log delivery result                           → consumer stores DeliveryResult
-
-4. For escalation policies:
-   ├─ On entity create/update (unresolved state)    → scheduler.Schedule(entityID, steps, vars)
-   └─ On entity resolve/acknowledge                 → scheduler.Cancel(entityID)
-```
 
 ---
 
@@ -458,79 +471,74 @@ Add after l8ui shared scripts, before module scripts. Order matters — enums mu
 <!-- L8Notify shared components -->
 <link rel="stylesheet" href="l8ui/notification/l8notify-notification.css">
 <script src="l8ui/notification/l8notify-enums.js"></script>
-<script src="l8ui/notification/l8notify-smtp-config.js"></script>
-<script src="l8ui/notification/l8notify-webhook-mgmt.js"></script>
+<script src="l8ui/notification/l8notify-integration-mgmt.js"></script>
 <script src="l8ui/notification/l8notify-delivery-log.js"></script>
 <script src="l8ui/notification/l8notify-target-editor.js"></script>
 ```
 
-For mobile, add the same includes to `m/app.html`.
+For mobile: `l8notify` has never shipped `Layer8M*` equivalents of any of its components — no consumer currently
+exposes these on mobile. A mobile build-out is a separable follow-up using the same `Layer8MTable`/`Layer8MForms`
+data-only pattern.
 
 ### Step 3: Use in Consumer UI
 
-#### SMTP Config in Admin Page
+All three components are **data-only** — `getColumns()`/`getFormDefinition()` return plain definitions; the
+consumer wires them into the standard `Layer8DTable`/`Layer8DForms` flow. None of them render DOM directly.
+
+#### Integration Config CRUD (Admin Page)
 
 ```javascript
-// Render SMTP config form
-L8NotifySmtpConfig.render(
-    container,           // DOM element to render into
-    currentSmtpConfig,   // current SmtpConfig object (or null for new)
-    function(data) {     // onSave callback — receives collected form data
-        // POST data to your SMTP config service endpoint
-    }
-);
-
-// Send test email
-L8NotifySmtpConfig.sendTest(
-    smtpConfig,          // SmtpConfig object to test with
-    "test@example.com",  // recipient for test email
-    "/myproject/10/SmtpTest"  // consumer's test endpoint URL
-);
+const table = new Layer8DTable({
+    containerId: 'integration-config-table',
+    endpoint: '/<prefix>/78/IntegCfg',
+    modelName: 'IntegrationConfig',
+    primaryKey: 'integrationId',
+    columns: L8NotifyIntegrationMgmt.getColumns(),
+    onAdd: () => Layer8DForms.openAddForm(
+        { endpoint: '/<prefix>/78/IntegCfg', primaryKey: 'integrationId', modelName: 'IntegrationConfig' },
+        L8NotifyIntegrationMgmt.getFormDefinition()
+    ),
+    onEdit: (id) => Layer8DForms.openEditForm(
+        { endpoint: '/<prefix>/78/IntegCfg', primaryKey: 'integrationId', modelName: 'IntegrationConfig' },
+        L8NotifyIntegrationMgmt.getFormDefinition(), id
+    ),
+    onDelete: (id) => Layer8DForms.confirmDelete(
+        { endpoint: '/<prefix>/78/IntegCfg', primaryKey: 'integrationId', modelName: 'IntegrationConfig' }, id
+    )
+});
+table.init();
 ```
 
-#### Webhook Management in Admin Page
+#### Delivery Log (Read-Only Admin Page)
+
+`NotifyRecord` rejects `PUT` server-side — the detail popup MUST use `openViewForm`, never `openEditForm`
+(`immutability-ui-alignment.md`).
 
 ```javascript
-L8NotifyWebhookMgmt.render(
-    container,           // DOM element to render into
-    webhookConfigs,      // array of WebhookConfig objects
-    function(data) {     // onSave — called for add and edit
-        // POST/PUT data to your webhook config service
-    },
-    function(webhook) {  // onDelete — called when user deletes
-        // DELETE webhook from your service
-    },
-    function(webhook) {  // onTest — called when user clicks Test
-        // Send test ping to webhook.url
-    }
-);
+const table = new Layer8DTable({
+    containerId: 'delivery-log-table',
+    endpoint: '/<prefix>/78/Notify',
+    modelName: 'NotifyRecord',
+    primaryKey: 'notifyId',
+    columns: L8NotifyDeliveryLog.getColumns({ showChannel: true, showTarget: true }),
+    onRowClick: (item) => Layer8DForms.openViewForm(
+        { endpoint: '/<prefix>/78/Notify', primaryKey: 'notifyId', modelName: 'NotifyRecord' },
+        L8NotifyDeliveryLog.getFormDefinition(), item
+    ),
+    onAdd: null, onEdit: null, onDelete: null // read-only — no CRUD controls
+});
+table.init();
 ```
-
-#### Delivery Log in Detail Popup or Admin Page
-
-```javascript
-L8NotifyDeliveryLog.render(
-    container,           // DOM element to render into
-    deliveryResults,     // array of DeliveryResult objects
-    {
-        showChannel: true,   // show Channel column (default: true)
-        showTarget: true,    // show Endpoint column (default: true)
-        pageSize: 25         // rows per page (default: 25)
-    }
-);
-```
-
-Row click opens a detail popup showing all fields (status, channel, endpoint, HTTP status, attempt #, error message, timestamp).
 
 #### Target Editor in Policy/Rule Forms
 
-Use in consumer form definitions to let users edit the `repeated NotifyTarget` array inline:
+Use in consumer form definitions to let users edit the `repeated NotifyTarget` array inline — unchanged, still an
+embedded/child type editor, not backed by its own service:
 
 ```javascript
 const targetDef = L8NotifyTargetEditor.getInlineTableDef();
 // Returns: { key: 'targets', label: 'Notification Targets', columns: [...] }
 
-// In your rule/policy form definition:
 MyModule.forms = {
     NotificationRule: f.form('Notification Rule', [
         f.section('Rule Details', [
@@ -556,22 +564,24 @@ MyModule.forms = {
 // In consumer column definitions
 ...col.enum('channel', 'Channel', null, L8NotifyEnums.render.channel)
 ...col.status('status', 'Status', null, L8NotifyEnums.render.deliveryStatus)
+...col.enum('type', 'Type', null, L8NotifyEnums.render.integrationType)
 
-// In consumer form definitions (select dropdown)
-...f.select('channel', 'Channel', L8NotifyEnums.NOTIFY_CHANNEL)
+// In consumer form definitions (select dropdown) — note .enum, NOT the whole factory-return wrapper
+...f.select('channel', 'Channel', L8NotifyEnums.NOTIFY_CHANNEL.enum)
 ```
 
 ---
 
 ## Testing
 
-All four Go packages have unit tests. Run them with:
+All four plain-library Go packages have unit tests. Run them with:
 
 ```bash
 cd go && ./test.sh
 ```
 
-The `test.sh` script fetches dependencies, runs all tests with `-v` and `-failfast`, collects coverage across all packages (`channel`, `template`, `throttle`, `escalation`), and opens an HTML coverage report.
+The `test.sh` script fetches dependencies, runs all tests with `-v` and `-failfast`, collects coverage across all
+packages (`channel`, `template`, `throttle`, `escalation`), and opens an HTML coverage report.
 
 To run tests without the interactive prompt or coverage browser:
 
@@ -583,23 +593,28 @@ cd go && go test ./... -v --failfast
 
 | Package | Test File | Key Cases |
 |---------|-----------|-----------|
-| `channel` | `channel_test.go` | Dispatch routing per channel, custom sender registration, nil/error handling |
+| `channel` | `channel_test.go` | Dispatch routing per channel, custom sender registration, nil/error handling, HMAC signature presence |
 | `template` | `template_test.go` | Placeholder substitution, missing keys, empty/nil inputs, `RenderWithDefault` |
 | `throttle` | `throttle_test.go` | Per-key cooldown, hourly rate limits, cross-key isolation, `Reset()` |
 | `escalation` | `scheduler_test.go` | Empty steps, single/multi-step chains, `Cancel()`, `Active()` count |
+
+`services` (`Notify`/`IntegCfg`) has no tests in this repo — per `test-location-and-approach.md`, tests for
+activatable services belong in the *consumer's* `go/tests/`, exercised through the system's HTTP API, not here.
+`l8notify` itself has no `go/tests/` directory — same exemption `l8events` takes.
 
 ---
 
 ## Dependencies
 
-**Go**: `google.golang.org/protobuf` only. No l8orm, l8services, l8bus, l8web, l8reflect, or other Layer 8 infrastructure dependencies.
+**Go**: `google.golang.org/protobuf`, `github.com/saichler/l8types/go` (for `l8notifysvc` types and `INotify`/
+`IIntegration` interfaces), `github.com/saichler/l8common/go` (for `ActivateService`, `GenerateID`,
+`ComputeHMACSHA256`, `RegisterType`). No `l8orm`, `l8services`, `l8bus`, or `l8web` direct dependencies — those come
+in transitively through `l8common`.
 
 **l8ui components**: Require the l8ui shared library already present in the consumer project:
 - `Layer8DTable` — table rendering
-- `Layer8DPopup` — detail popups
-- `Layer8DForms` / `Layer8FormFactory` — form generation and data collection
+- `Layer8DForms` / `Layer8FormFactory` — form generation, `openAddForm`/`openEditForm`/`openViewForm`/`confirmDelete`
 - `Layer8ColumnFactory` — column definitions
 - `Layer8EnumFactory` — enum map creation
 - `Layer8DRenderers` — `createStatusRenderer`, `renderEnum`
-- `Layer8DNotification` — toast notifications (used by SMTP test)
 - `--layer8d-*` CSS custom properties from `layer8d-theme.css`

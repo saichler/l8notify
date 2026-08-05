@@ -933,7 +933,7 @@ site inside `channel.Dispatch` — no change needed to `channel/`.
 
 ---
 
-## Phase 5 — `l8notify`: l8ui Component Rework
+## Phase 5 [DONE] — `l8notify`: l8ui Component Rework
 
 **Repo**: `l8notify`
 **Prerequisites**: none to *author* — pure JS, no Go compile dependency on any earlier phase. Functional
@@ -992,7 +992,7 @@ separable follow-up using the same `Layer8MTable`/`Layer8MForms` data-only patte
 
 ---
 
-## Phase 6 — `l8notify`: Consumer Integration Reference (`README.md`)
+## Phase 6 [DONE] — `l8notify`: Consumer Integration Reference (`README.md`)
 
 **Repo**: `l8notify`
 **Prerequisites**: none to write, but most accurate once Phase 3/4/5 have landed (documents their final shape).
