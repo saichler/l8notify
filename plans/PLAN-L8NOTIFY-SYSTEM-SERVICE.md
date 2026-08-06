@@ -979,13 +979,20 @@ Unchanged — `NotifyTarget` stays an embedded/child type, used the same way in 
 
 | Component | Desktop file | Desktop status | Mobile file | Mobile status |
 |---|---|---|---|---|
-| Delivery log viewer | `l8notify-delivery-log.js` | Reworked, 5.1 | *none exists* | **Deferred** |
-| Integration config mgmt | `l8notify-integration-mgmt.js` | New, 5.2 | *none exists* | **Deferred** |
-| Target editor | `l8notify-target-editor.js` | Unchanged | *none exists* | **Deferred** |
+| Delivery log viewer | `l8notify-delivery-log.js` | Reworked, 5.1 | *none exists* | **Closed** — see below |
+| Integration config mgmt | `l8notify-integration-mgmt.js` | New, 5.2 | *none exists* | **Closed** — see below |
+| Target editor | `l8notify-target-editor.js` | Unchanged | *none exists* | **Closed** — see below |
 
-**Reason for deferral**: `l8notify` has never shipped `Layer8M*` equivalents of any of its components. No consumer
-currently exposes these on mobile. This transformation's scope is the backend service; a mobile build-out is a
+**Original reason for deferral (superseded)**: `l8notify` had never shipped `Layer8M*` equivalents of any of its
+components, and this transformation's scope was the backend service, so a mobile build-out was deferred as a
 separable follow-up using the same `Layer8MTable`/`Layer8MForms` data-only pattern established here.
+
+**Closed by `plans/PLAN-MOVE-L8UI-NOTIFICATION-TO-L8UI.md`**: that plan's investigation found all 4 JS files here
+are pure `getColumns()`/`getFormDefinition()`/`getInlineTableDef()` data functions with zero DOM manipulation —
+no `Layer8M*` fork was needed at all. The files were relocated to `../l8ui/notify/` unforked, with `primary`/
+`secondary` mobile card markers added in-place to `l8notify-integration-mgmt.js` and `l8notify-delivery-log.js`.
+Net new mobile-specific code: zero. Manual in-browser confirmation of the resulting mobile card layout is still
+deferred (that plan's own Phase 5), but the "no mobile files exist" gap this phase left open is closed.
 
 **Files**: 2 modified (`l8notify-delivery-log.js`, `l8notify-enums.js`), 1 new (`l8notify-integration-mgmt.js`),
 2 deleted (`l8notify-smtp-config.js`, `l8notify-webhook-mgmt.js`), 1 unchanged (`l8notify-target-editor.js`)

@@ -36,13 +36,9 @@ l8notify/
 │   └── services/
 │       ├── IntegrationConfigService.go  # ActivateIntegrationConfig() — editable CRUD for IntegrationConfig
 │       └── NotifyRecordService.go       # ActivateNotify() — persists NotifyRecord, dispatches on POST
-├── l8ui/notification/
-│   ├── l8notify-enums.js               # NotifyChannel + DeliveryStatus + IntegrationType enums with renderers
-│   ├── l8notify-integration-mgmt.js    # IntegrationConfig CRUD component (columns + form, data-only)
-│   ├── l8notify-delivery-log.js        # Delivery log viewer (columns + form, data-only, read-only)
-│   ├── l8notify-target-editor.js       # Inline table definition for NotifyTarget arrays
-│   └── l8notify-notification.css       # Shared styles using --layer8d-* theme tokens
 └── plans/                          # Implementation plans
+
+(UI components live in the l8ui repo at l8ui/notify/ — see "l8ui Integration" below)
 ```
 
 Shared proto types (`NotifyChannel`, `DeliveryStatus`, `IntegrationType`, `NotifyTarget`, `SmtpConfig`,
@@ -455,32 +451,25 @@ func (s *Scheduler) Active() int
 
 ## l8ui Integration
 
-### Step 1: Copy Files
+These components ship as part of the `l8ui` library at `l8ui/notify/`, used identically on both desktop and
+mobile. Add `l8ui` to your project via `setup-l8ui-submodule.sh` (see `l8ui-copy-to-new-project.md`) and they're
+available automatically — no separate copy step, no separate mobile build.
 
-Copy `l8notify/l8ui/notification/` into the consumer project's web directory:
+### Step 1: Add to app.html
 
-```bash
-cp -r <path-to-l8notify>/l8ui/notification/ <consumer>/go/<project>/ui/web/l8ui/notification/
-```
-
-### Step 2: Add to app.html
-
-Add after l8ui shared scripts, before module scripts. Order matters — enums must load first.
+Add after l8ui shared scripts, before module scripts. Order matters — enums must load first. Same include list
+for `app.html` and `m/app.html`:
 
 ```html
 <!-- L8Notify shared components -->
-<link rel="stylesheet" href="l8ui/notification/l8notify-notification.css">
-<script src="l8ui/notification/l8notify-enums.js"></script>
-<script src="l8ui/notification/l8notify-integration-mgmt.js"></script>
-<script src="l8ui/notification/l8notify-delivery-log.js"></script>
-<script src="l8ui/notification/l8notify-target-editor.js"></script>
+<link rel="stylesheet" href="l8ui/notify/l8notify-notification.css">
+<script src="l8ui/notify/l8notify-enums.js"></script>
+<script src="l8ui/notify/l8notify-integration-mgmt.js"></script>
+<script src="l8ui/notify/l8notify-delivery-log.js"></script>
+<script src="l8ui/notify/l8notify-target-editor.js"></script>
 ```
 
-For mobile: `l8notify` has never shipped `Layer8M*` equivalents of any of its components — no consumer currently
-exposes these on mobile. A mobile build-out is a separable follow-up using the same `Layer8MTable`/`Layer8MForms`
-data-only pattern.
-
-### Step 3: Use in Consumer UI
+### Step 2: Use in Consumer UI
 
 All three components are **data-only** — `getColumns()`/`getFormDefinition()` return plain definitions; the
 consumer wires them into the standard `Layer8DTable`/`Layer8DForms` flow. None of them render DOM directly.
