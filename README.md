@@ -43,13 +43,13 @@ l8notify/
 
 Shared proto types (`NotifyChannel`, `DeliveryStatus`, `IntegrationType`, `NotifyTarget`, `SmtpConfig`,
 `WebhookConfig`, `DeliveryResult`, `EscalationStep`, `NotifyRecord`, `IntegrationConfig`) live in
-**`l8types/go/types/l8notifysvc`**, not in this repo — l8notify has no `proto/` directory of its own. This avoided
+**`l8types/go/types/l8notify`**, not in this repo — l8notify has no `proto/` directory of its own. This avoided
 a naming collision with `l8types/go/types/l8notify`, an unrelated, pre-existing framework package (the internal
 service change-notification mechanism).
 
 ---
 
-## Protobuf Types (`l8types/go/types/l8notifysvc`)
+## Protobuf Types (`l8types/go/types/l8notify`)
 
 | Type | Kind | Purpose |
 |------|------|---------|
@@ -105,11 +105,11 @@ respective `*ServiceCallback`s reject the operations that don't apply (`NotifyRe
 ```go
 import (
     l8c "github.com/saichler/l8common/go/common"
-    "github.com/saichler/l8types/go/types/l8notifysvc"
+    "github.com/saichler/l8types/go/types/l8notify"
 )
 
-l8c.RegisterType(resources, &l8notifysvc.NotifyRecord{}, &l8notifysvc.NotifyRecordList{}, "NotifyId")
-l8c.RegisterType(resources, &l8notifysvc.IntegrationConfig{}, &l8notifysvc.IntegrationConfigList{}, "IntegrationId")
+l8c.RegisterType(resources, &l8notify.NotifyRecord{}, &l8notify.NotifyRecordList{}, "NotifyId")
+l8c.RegisterType(resources, &l8notify.IntegrationConfig{}, &l8notify.IntegrationConfigList{}, "IntegrationId")
 ```
 
 ### Step 4: Set Up Credentials (deploy-time, not code)
@@ -138,7 +138,7 @@ Any service in the ecosystem — not just consumers of `l8notify`'s own admin UI
 
 ```go
 result := vnic.Resources().Notify().Send(
-    l8notifysvc.NotifyChannel_NOTIFY_CHANNEL_EMAIL,
+    l8notify.NotifyChannel_NOTIFY_CHANNEL_EMAIL,
     "user@example.com", "Order Confirmed", "Your order SO-001 has shipped.",
     nil, // attributes, forwarded onto the persisted NotifyRecord
 )
@@ -158,7 +158,7 @@ import (
     "github.com/saichler/l8notify/go/template"
     "github.com/saichler/l8notify/go/throttle"
     "github.com/saichler/l8notify/go/escalation"
-    ntf "github.com/saichler/l8types/go/types/l8notifysvc"
+    ntf "github.com/saichler/l8types/go/types/l8notify"
 )
 ```
 
@@ -613,7 +613,7 @@ unexported internals).
 
 ## Dependencies
 
-**Go**: `google.golang.org/protobuf`, `github.com/saichler/l8types/go` (for `l8notifysvc` types and `INotify`/
+**Go**: `google.golang.org/protobuf`, `github.com/saichler/l8types/go` (for `l8notify` types and `INotify`/
 `IIntegration` interfaces), `github.com/saichler/l8common/go` (for `ActivateService`, `GenerateID`,
 `ComputeHMACSHA256`, `RegisterType`). No `l8orm`, `l8services`, `l8bus`, or `l8web` direct dependencies — those come
 in transitively through `l8common`.

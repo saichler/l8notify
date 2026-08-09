@@ -5,7 +5,7 @@ import (
 
 	common "github.com/saichler/l8common/go/common"
 	"github.com/saichler/l8types/go/ifs"
-	ntf "github.com/saichler/l8types/go/types/l8notifysvc"
+	ntf "github.com/saichler/l8types/go/types/l8notify"
 )
 
 const (

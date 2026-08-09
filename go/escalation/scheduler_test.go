@@ -1,7 +1,7 @@
 package escalation
 
 import (
-	ntf "github.com/saichler/l8types/go/types/l8notifysvc"
+	ntf "github.com/saichler/l8types/go/types/l8notify"
 	"sync"
 	"testing"
 	"time"

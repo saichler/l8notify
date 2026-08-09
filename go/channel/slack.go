@@ -3,7 +3,7 @@ package channel
 import (
 	"bytes"
 	"fmt"
-	ntf "github.com/saichler/l8types/go/types/l8notifysvc"
+	ntf "github.com/saichler/l8types/go/types/l8notify"
 	"io"
 	"net/http"
 	"time"

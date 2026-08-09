@@ -3,7 +3,7 @@ package channel
 import (
 	"crypto/tls"
 	"fmt"
-	ntf "github.com/saichler/l8types/go/types/l8notifysvc"
+	ntf "github.com/saichler/l8types/go/types/l8notify"
 	"net/smtp"
 	"strings"
 	"time"

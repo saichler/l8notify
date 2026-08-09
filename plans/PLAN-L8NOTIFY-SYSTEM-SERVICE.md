@@ -125,7 +125,7 @@ is **already occupied** by an unrelated, pre-existing framework type (`L8Notific
 internal service change-notification mechanism, confirmed present and in active use across the framework).
 
 **Resolution used in this plan** (needs confirmation, not unilaterally final): migrate all of `l8notify`'s shared
-types into a new `l8types/go/types/l8notifysvc` package (distinct spelling to avoid the collision — "svc" for
+types into a new `l8types/go/types/l8notify` package (distinct spelling to avoid the collision — "svc" for
 "service"). All of `l8notify`'s current proto content (`NotifyChannel`, `DeliveryStatus`, `NotifyTarget`,
 `DeliveryResult`, `EscalationStep`, `NotifyRecord`, `NotifyRecordList`) moves there, plus the new
 `IntegrationConfig`/`IntegrationConfigList`/`IntegrationType` (Phase 0.1). `l8notify`'s own `proto/l8notify.proto`
@@ -133,7 +133,7 @@ and `go/types/l8notify/` are retired entirely (Phase 1 is now just a pointer to 
 
 **Other names considered and rejected**: `l8notification` (too easily confused with the existing
 `L8Notification`), unprefixed names (breaks the `l8`-prefix convention every other package in `l8types/go/types/`
-follows). `l8notifysvc` is the working default in this plan; flagged in Open Items for explicit sign-off.
+follows). `l8notify` is the working default in this plan; flagged in Open Items for explicit sign-off.
 
 ---
 
@@ -141,7 +141,7 @@ follows). `l8notifysvc` is the working default in this plan; flagged in Open Ite
 
 ```
 l8types (Phase 0)
-    ├── go/types/l8notifysvc/            NEW package — migrated from l8notify's own proto
+    ├── go/types/l8notify/            NEW package — migrated from l8notify's own proto
     │   ├── NotifyChannel, DeliveryStatus, IntegrationType (enums)
     │   ├── NotifyTarget, DeliveryResult, EscalationStep (embedded/child, unchanged)
     │   ├── NotifyRecord / NotifyRecordList (Prime Object)
@@ -177,8 +177,8 @@ consumer project's own backend process (main.go)
         result := channel.Dispatch(target, message, adaptedSmtpConfig, webhookSecrets)
 
 consumer's UI main.go
-    └── RegisterType(&l8notifysvc.NotifyRecord{}, &l8notifysvc.NotifyRecordList{}, "NotifyId")
-        RegisterType(&l8notifysvc.IntegrationConfig{}, &l8notifysvc.IntegrationConfigList{}, "IntegrationId")
+    └── RegisterType(&l8notify.NotifyRecord{}, &l8notify.NotifyRecordList{}, "NotifyId")
+        RegisterType(&l8notify.IntegrationConfig{}, &l8notify.IntegrationConfigList{}, "IntegrationId")
 
 consumer's app.html / l8ui wiring (Phase 5)
     ├── L8NotifyDeliveryLog       → Layer8DTable at /<prefix>/78/Notify    (read-only — NotifyRecord immutable)
@@ -202,7 +202,7 @@ l8notify/
 │   ├── go.mod                      # MODIFIED — depends on l8common (Phase 0.5a), l8types (bumped, Phase 0)
 │   ├── channel/
 │   │   ├── webhook.go              # MODIFIED — uses common.ComputeHMACSHA256 (l8common) instead of inline hmac
-│   │   ├── email.go, slack.go, channel.go  # unchanged — still take *l8notifysvc.SmtpConfig / WebhookConfig
+│   │   ├── email.go, slack.go, channel.go  # unchanged — still take *l8notify.SmtpConfig / WebhookConfig
 │   ├── template/, throttle/, escalation/   # unchanged
 │   └── services/
 │       ├── IntegrationConfigService.go  # NEW (Phase 3) — ActivateIntegrationConfig(), editable CRUD callback
@@ -226,8 +226,8 @@ l8notify/
 **Outside this repo**:
 ```
 l8types/ (Phase 0)
-├── proto/l8notifysvc.proto         # NEW — migrated content of l8notify's former proto, plus IntegrationConfig
-├── go/types/l8notifysvc/*.pb.go    # regenerated
+├── proto/l8notify.proto         # NEW — migrated content of l8notify's former proto, plus IntegrationConfig
+├── go/types/l8notify/*.pb.go    # regenerated
 ├── go/ifs/Notify.go                # NEW — INotify
 ├── go/ifs/Integration.go           # NEW — IIntegration
 └── go/ifs/Resources.go             # MODIFIED — IResources gains Notify(), Integration()
@@ -254,14 +254,14 @@ l8events/ (Phase 0.5b)
 changes `l8types/go/ifs`, the actual interface-contract layer. Justified because `l8notify`, like `l8events`, is
 meant to be usable by *any* service in the ecosystem via `IResources`, not just its own consumer's code.
 
-### 0.1 New proto package — `l8types/proto/l8notifysvc.proto`
+### 0.1 New proto package — `l8types/proto/l8notify.proto`
 
 Migrated content (unchanged from `l8notify`'s current proto) plus the new generalized `IntegrationConfig`:
 
 ```protobuf
 syntax = "proto3";
-package l8notifysvc;
-option go_package = "./types/l8notifysvc";
+package l8notify;
+option go_package = "./types/l8notify";
 import "api.proto";
 
 // ─── Enums (unchanged from l8notify's current proto) ───
@@ -397,15 +397,15 @@ a stricter shape is preferred; revisit once a third/fourth integration type is a
 ```go
 package ifs
 
-import "github.com/saichler/l8types/go/types/l8notifysvc"
+import "github.com/saichler/l8types/go/types/l8notify"
 
 // INotify provides the API for dispatching notifications across the Layer 8 system.
 // Implementations route requests to the Notify service via the VNic — mirrors IEvents exactly.
 type INotify interface {
     // Send posts a notification for dispatch (email/webhook/Slack/etc.) and returns the
     // delivery outcome. attributes is forwarded onto the persisted NotifyRecord.
-    Send(channel l8notifysvc.NotifyChannel, endpoint, subject, message string,
-        attributes map[string]string) *l8notifysvc.DeliveryResult
+    Send(channel l8notify.NotifyChannel, endpoint, subject, message string,
+        attributes map[string]string) *l8notify.DeliveryResult
     SetVNic(IVNic)
 }
 ```
@@ -415,15 +415,15 @@ type INotify interface {
 ```go
 package ifs
 
-import "github.com/saichler/l8types/go/types/l8notifysvc"
+import "github.com/saichler/l8types/go/types/l8notify"
 
 // IIntegration provides lookup of configured integration endpoints (SMTP, webhook, etc.).
 type IIntegration interface {
     // GetIntegrationConfig retrieves a named integration configuration.
-    GetIntegrationConfig(name string) (*l8notifysvc.IntegrationConfig, error)
+    GetIntegrationConfig(name string) (*l8notify.IntegrationConfig, error)
     // ListIntegrationConfigs retrieves all integrations of the given type
     // (INTEGRATION_TYPE_UNSPECIFIED returns all types).
-    ListIntegrationConfigs(integrationType l8notifysvc.IntegrationType) ([]*l8notifysvc.IntegrationConfig, error)
+    ListIntegrationConfigs(integrationType l8notify.IntegrationType) ([]*l8notify.IntegrationConfig, error)
     SetVNic(IVNic)
 }
 ```
@@ -455,7 +455,7 @@ cd l8types/proto && ./make-bindings.sh
 Consumer projects (and `l8notify`, `l8utils` themselves) pick up the new `l8types` version through their normal
 vendor refresh — **not run by this plan**, per `vendor-and-git.md`.
 
-**Files**: 1 new proto + regenerated package (`l8notifysvc`), 2 new Go files (`Notify.go`, `Integration.go`), 1
+**Files**: 1 new proto + regenerated package (`l8notify`), 2 new Go files (`Notify.go`, `Integration.go`), 1
 modified (`Resources.go`)
 
 ---
@@ -464,7 +464,7 @@ modified (`Resources.go`)
 
 **Repo**: `l8utils`
 **Prerequisites**: Phase 0 pushed; `l8utils/go.mod` bumped to require the `l8types` version containing
-`l8notifysvc` + `INotify`/`IIntegration`.
+`l8notify` + `INotify`/`IIntegration`.
 
 Mirrors `l8utils/go/utils/events/events_api.go` exactly.
 
@@ -475,7 +475,7 @@ package notify
 
 import (
     "github.com/saichler/l8types/go/ifs"
-    ntf "github.com/saichler/l8types/go/types/l8notifysvc"
+    ntf "github.com/saichler/l8types/go/types/l8notify"
 )
 
 const (
@@ -528,7 +528,7 @@ import (
     "fmt"
     "github.com/saichler/l8types/go/ifs"
     "github.com/saichler/l8types/go/types/l8api"
-    ntf "github.com/saichler/l8types/go/types/l8notifysvc"
+    ntf "github.com/saichler/l8types/go/types/l8notify"
 )
 
 const (
@@ -620,7 +620,7 @@ already use — verify the exact import path against `l8common/go/common/service
 ## Phase 0.5a [DONE] — `l8common`: consolidate shared activation/ID/HMAC helpers
 
 **Repo**: `l8common`
-**Prerequisites**: none — independent of Phase 0/0.25 (doesn't reference any `l8notify`/`l8notifysvc` type), can
+**Prerequisites**: none — independent of Phase 0/0.25 (doesn't reference any `l8notify`/`l8notify` type), can
 run in any order relative to them.
 
 While designing the service-activation code, review surfaced that the helper code `l8notify` was about to write a
@@ -722,7 +722,7 @@ func ActivateEvents(creds, dbname string, vnic ifs.IVNic) {
 
 Earlier drafts of this plan had `l8notify` own its proto (`proto/l8notify.proto`, `go/types/l8notify/`). Per Design
 Decision 4 / Phase 0, all of that content — plus the new `IntegrationConfig` — now lives in
-`l8types/go/types/l8notifysvc` instead. `l8notify`'s own `proto/` and `go/types/l8notify/` directories are simply
+`l8types/go/types/l8notify` instead. `l8notify`'s own `proto/` and `go/types/l8notify/` directories are simply
 deleted as part of Phase 4's session (whichever `l8notify` phase first needs the new import path) — **this phase
 produces no independent deliverable and needs no session of its own.**
 
@@ -739,7 +739,7 @@ produces no independent deliverable and needs no session of its own.**
 ## Phase 3 [DONE] — `l8notify`: `go/services/IntegrationConfigService.go`
 
 **Repo**: `l8notify`
-**Prerequisites**: Phase 0 pushed + `l8notify/go.mod` bumped to require the new `l8types` (for `l8notifysvc` types);
+**Prerequisites**: Phase 0 pushed + `l8notify/go.mod` bumped to require the new `l8types` (for `l8notify` types);
 Phase 0.5a pushed + `l8notify/go.mod` bumped to require the new `l8common` (for `ActivateService`/`GenerateID`).
 Phase 0.25/0.5b are **not** required to compile this phase — only required later, for end-to-end runtime testing
 (Phase 8), since they live in the consumer's dependency chain, not `l8notify`'s own.
@@ -811,7 +811,7 @@ had one real deliverable (this file), so they're one phase/session now, not two.
 ```go
 import (
     common "github.com/saichler/l8common/go/common"
-    ntf "github.com/saichler/l8types/go/types/l8notifysvc"
+    ntf "github.com/saichler/l8types/go/types/l8notify"
 )
 
 const (
@@ -1018,8 +1018,8 @@ project — same constraint `evtservices.ActivateEvents` already relies on. Stat
 
 ### 6.2 UI type registration
 ```go
-common.RegisterType(resources, &l8notifysvc.NotifyRecord{}, &l8notifysvc.NotifyRecordList{}, "NotifyId")
-common.RegisterType(resources, &l8notifysvc.IntegrationConfig{}, &l8notifysvc.IntegrationConfigList{}, "IntegrationId")
+common.RegisterType(resources, &l8notify.NotifyRecord{}, &l8notify.NotifyRecordList{}, "NotifyId")
+common.RegisterType(resources, &l8notify.IntegrationConfig{}, &l8notify.IntegrationConfigList{}, "IntegrationId")
 ```
 
 ### 6.3 Credentials setup (deploy-time, not code)
@@ -1047,7 +1047,7 @@ either the JSON example or `resolveSmtpConfig` — do not assume they already ag
 
 ### 6.4 Any-service dispatch via `INotify`
 ```go
-result := vnic.Resources().Notify().Send(l8notifysvc.NotifyChannel_NOTIFY_CHANNEL_EMAIL,
+result := vnic.Resources().Notify().Send(l8notify.NotifyChannel_NOTIFY_CHANNEL_EMAIL,
     "user@example.com", "Order Confirmed", "Your order SO-001 has shipped.", nil)
 ```
 
@@ -1116,7 +1116,7 @@ any git command; all pushing and vendoring between phases is the user's own acti
   and `IIntegration`/`INotify` replacing what would otherwise have been two near-identical config-lookup paths.
 - **`framework-interface-boundaries.md`**: three changes reach outside `l8notify`'s own repo, each its own phase
   requiring explicit sign-off: Phase 0.5a's `l8common.ServiceConfig` extension (additive, implementation layer, not
-  `ifs`); Phase 0's `l8notifysvc` types + `INotify`/`IIntegration` on `IResources` (this one **does** touch
+  `ifs`); Phase 0's `l8notify` types + `INotify`/`IIntegration` on `IResources` (this one **does** touch
   `l8types/go/ifs` — justified because `l8notify`, like `l8events`, is meant to be usable via `IResources` by any
   service in the ecosystem, mirroring the existing `IEvents` precedent exactly).
 - **`security-config-structure.md`**: secrets are resolved exclusively via the `credentials` map +
@@ -1170,7 +1170,7 @@ any git command; all pushing and vendoring between phases is the user's own acti
 
 | Category | New | Modified | Deleted |
 |----------|-----|----------|---------|
-| `l8types` proto + generated (Phase 0) | 1 (`l8notifysvc` package) | 0 | 0 |
+| `l8types` proto + generated (Phase 0) | 1 (`l8notify` package) | 0 | 0 |
 | `l8types` go/ifs (Phase 0) | 2 (`Notify.go`, `Integration.go`) | 1 (`Resources.go`) | 0 |
 | `l8utils` go/utils (Phase 0.25) | 2 (`notify/`, `integration/`) | 1 (`resources/Resources.go`) | 0 |
 | `l8common` go/common (Phase 0.5a) | 1 (`hmac.go`) | 1 (`service_factory.go`) | 0 |
@@ -1187,7 +1187,7 @@ any git command; all pushing and vendoring between phases is the user's own acti
 
 ## Open Items for Peer Review
 
-1. **`l8types/go/types/l8notifysvc` naming** (Design Decision 4) — the working default; needs explicit confirmation
+1. **`l8types/go/types/l8notify` naming** (Design Decision 4) — the working default; needs explicit confirmation
    since it's a framework-owner naming call.
 2. **`ServiceArea = 78`** — confirmed free against every sibling project checked; worth a final grep before Phase 3.
 3. **`l8types`/`l8utils` sign-off** (Phase 0, 0.25) — these touch actual interface contracts (`IResources`); needs

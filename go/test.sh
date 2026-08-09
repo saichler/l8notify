@@ -13,9 +13,6 @@ go mod init
 GOPROXY=direct GOPRIVATE=github.com go mod tidy
 go mod vendor
 
-echo "About to run tests"
-read -n 1 -s -r -p "Press any key to continue..."
-
 # Run unit tests with coverage
 go test -v -coverpkg=./channel/...,./template/...,./throttle/...,./escalation/... -coverprofile=cover.html ./... --failfast
 

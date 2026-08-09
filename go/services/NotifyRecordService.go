@@ -8,7 +8,7 @@ import (
 	"github.com/saichler/l8notify/go/channel"
 	"github.com/saichler/l8notify/go/template"
 	"github.com/saichler/l8types/go/ifs"
-	ntf "github.com/saichler/l8types/go/types/l8notifysvc"
+	ntf "github.com/saichler/l8types/go/types/l8notify"
 )
 
 // NotifyServiceName is the service name; NotifyServiceArea is declared in

@@ -31,3 +31,6 @@ go.work.sum
 .idea/
 .vscode/
 vendor
+.codex
+go.mod
+go.sum
