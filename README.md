@@ -1,13 +1,20 @@
 # l8notify
 
-Notification library and system service for Layer 8 applications. Provides reusable Go packages (dispatch, template
-rendering, throttling, escalation scheduling) **and** an activatable backend service — `Notify` (delivery log,
-dispatches on `POST`) and `IntegCfg` (editable integration endpoint configuration) — plus l8ui components for the
-admin UI, following the same shape as `l8events`.
+Notification delivery **system service** for Layer 8 applications, following the same shape as `l8events`. It
+provides two backend services in ServiceArea 78 — `Notify` (delivery log; dispatches on `POST`) and
+`IntegCfg` (editable integration endpoint configuration) — reachable from any service in the ecosystem via
+`vnic.Resources().Notify().Send(...)`.
 
-l8notify is **not** a standalone binary — it has no `main.go`, no Dockerfile, no k8s manifests. Consumer projects
-import its Go packages, activate its two services from their own backend `main.go`, and copy its l8ui components
-into their own web directories.
+**l8notify is required infrastructure in every Layer 8 project**, exactly like `l8events`. Projects
+never hand-roll SMTP/webhook/Slack senders or their own delivery-log tables — all notifications go through the
+`Notify` service.
+
+Like `l8events`, l8notify has no `main.go`, Dockerfile, or k8s manifests of its own. Its two services are
+**activated by `l8common`** on behalf of every project — projects never call `ActivateNotify`/
+`ActivateIntegrationConfig` themselves; they only register the types in their UI `main.go`. The admin UI
+components ship with `l8ui` (`l8ui/notify/`). The internal Go packages
+(`channel`, `template`, `throttle`, `escalation`) that the service is built on remain importable for bespoke
+policy flows.
 
 ---
 
@@ -16,7 +23,7 @@ into their own web directories.
 ```
 l8notify/
 ├── go/
-│   ├── go.mod                      # Module: github.com/saichler/l8notify/go
+│   ├── go.mod                      # Local only (gitignored) — published module is github.com/saichler/l8notify
 │   ├── test.sh                     # Runs all tests with coverage report
 │   ├── channel/
 │   │   ├── channel.go              # Dispatch router + Sender interface + custom sender registry
@@ -72,27 +79,10 @@ building-block type consumers can embed in their own policy/rule protos, exactly
 
 ## Go Integration
 
-### Step 1: Add the Dependency
+### Activation (handled by l8common)
 
-```bash
-cd go
-GOPROXY=direct GOPRIVATE=github.com go get github.com/saichler/l8notify/go@latest
-go mod vendor
-```
-
-### Step 2: Activate the Services
-
-**Both calls below must run in exactly one process within a given consumer project** — same constraint
-`evtservices.ActivateEvents` already relies on (`single-owner-database-table.md`). Activating either service on
-more than one node causes divergent in-memory caches and silently stale data.
-
-```go
-import notifyservices "github.com/saichler/l8notify/go/services"
-
-// In your backend main.go, after services.ActivateAllServices(...):
-notifyservices.ActivateNotify(dbcred, dbname, nic)
-notifyservices.ActivateIntegrationConfig(dbcred, dbname, nic)
-```
+`l8common` activates both services — projects must **not** call them. They must run in exactly one process
+(`single-owner-database-table.md`); a second activation causes divergent in-memory caches and silently stale data.
 
 `Notify` (ServiceArea 78) persists `NotifyRecord` and dispatches on `POST`. `IntegCfg` (same ServiceArea 78) owns
 CRUD for `IntegrationConfig`. Both go through `l8common.ActivateService`, so both automatically expose
@@ -100,7 +90,15 @@ CRUD for `IntegrationConfig`. Both go through `l8common.ActivateService`, so bot
 respective `*ServiceCallback`s reject the operations that don't apply (`NotifyRecord` rejects `PUT`;
 `IntegrationConfig` accepts everything).
 
-### Step 3: Register Types in Your UI `main.go`
+Projects do not need a Go dependency on `l8notify` for this — the types come from `l8types`. Add one only for
+[direct package use](#advanced-direct-package-use-bespoke-policy-flows):
+
+```bash
+GOPROXY=direct GOPRIVATE=github.com go get github.com/saichler/l8notify/go/channel@latest
+go mod vendor
+```
+
+### Step 1: Register Types in Your UI `main.go`
 
 ```go
 import (
@@ -112,7 +110,7 @@ l8c.RegisterType(resources, &l8notify.NotifyRecord{}, &l8notify.NotifyRecordList
 l8c.RegisterType(resources, &l8notify.IntegrationConfig{}, &l8notify.IntegrationConfigList{}, "IntegrationId")
 ```
 
-### Step 4: Set Up Credentials (deploy-time, not code)
+### Step 2: Set Up Credentials (deploy-time, not code)
 
 The consumer's own security config JSON `credentials` map gets one entry per integration's secret. The non-secret
 routing data (host, port, URL, retry count, etc.) is entered through the admin UI (`L8NotifyIntegrationMgmt`, see
@@ -131,7 +129,7 @@ secret, for a single-value webhook credential) and `yside` as the password — t
 `l8common.ActivateService` itself uses for DB credentials, verified directly against `OpenDBConection`. `aside` and
 `name` (4th return) are unused for these two credential types.
 
-### Step 5: Dispatch From Any Service
+### Step 3: Dispatch From Any Service
 
 Any service in the ecosystem — not just consumers of `l8notify`'s own admin UI — can send a notification through
 `IResources`, mirroring `Events().PostSystemEvent(...)`:
@@ -147,10 +145,11 @@ result := vnic.Resources().Notify().Send(
 This POSTs a `NotifyRecord` to the `Notify` service over the vnic and returns the resolved `*DeliveryResult`
 synchronously (unlike `Events`, which is fire-and-forget — `Send` needs the dispatch outcome back).
 
-### Alternative: Direct Package Use (no service, no persistence)
+### Advanced: Direct Package Use (bespoke policy flows)
 
-The underlying `channel`/`template`/`throttle`/`escalation` packages are still plain Go libraries — usable directly
-without activating either service, e.g. for a policy-evaluation flow where the consumer manages its own persistence:
+The `channel`/`template`/`throttle`/`escalation` packages the service is built on are importable directly, e.g.
+for a policy-evaluation flow that manages its own rule persistence. This does **not** replace the
+`Notify`/`IntegCfg` services, which l8common activates in every project:
 
 ```go
 import (
@@ -200,7 +199,7 @@ func (cb *MyServiceCallback) evaluateNotificationRules(entity *myproject.MyEntit
 }
 ```
 
-Prefer `vnic.Resources().Notify().Send(...)` (Step 5) for anything that should show up in the shared delivery log —
+Prefer `vnic.Resources().Notify().Send(...)` (Step 3) for anything that should show up in the shared delivery log —
 this direct-package path is for consumers that need their own bespoke persistence/policy model instead.
 
 ---
@@ -212,6 +211,8 @@ this direct-package path is for consumers that need their own bespoke persistenc
 ```go
 import "github.com/saichler/l8notify/go/services"
 ```
+
+Called by `l8common` — not by projects.
 
 | Function | Service | ServiceArea | PrimaryKey | Notes |
 |----------|---------|-------------|-----------|-------|
@@ -376,8 +377,9 @@ func (t *Throttler) Reset()
 import "github.com/saichler/l8notify/go/escalation"
 ```
 
-Unchanged from before this transformation — stays a plain in-memory library, exactly like `l8events` leaves
-`state`/`archive`/`maintenance` as plain libraries. Out of scope for the system-service migration.
+A plain in-memory package (not wired into the `Notify` service), exactly like `l8events` leaves
+`state`/`archive`/`maintenance` as plain packages. Step handlers should deliver via `Notify().Send(...)` so escalation
+deliveries appear in the shared delivery log.
 
 #### StepHandler
 
@@ -435,7 +437,7 @@ func (s *Scheduler) Active() int
 
 | Responsibility | l8notify | Consumer |
 |----------------|----------|----------|
-| `NotifyRecord`/`IntegrationConfig` persistence | **Provides** (`Notify`/`IntegCfg` services) | Activates both once, in one process |
+| `NotifyRecord`/`IntegrationConfig` persistence | **Provides** (`Notify`/`IntegCfg` services, activated by l8common) | Registers the types in its UI `main.go` |
 | SMTP/webhook secret storage | Never stores secrets | Own security config JSON `credentials` map |
 | Delivery dispatch + logging | **Provides** (`Notify.Before(POST)` + `channel.Dispatch`) | -- |
 | Admin UI for integration config | Provides `L8NotifyIntegrationMgmt` | Wires into `Layer8DTable`/`Layer8DForms` CRUD |
@@ -597,8 +599,8 @@ Recipe for the consumer's own integration test:
 
 1. Test file lives in the consumer's `go/tests/integration/notify_test.go`, not inside `l8notify`.
 2. Seed the consumer's `credentials` map with a `smtp` entry pointed at a local SMTP catcher (e.g. `smtp4dev`) —
-   see the credentials JSON shape in [Step 4 above](#step-4-set-up-credentials-deploy-time-not-code).
-3. Stand up the consumer's `IVNic`, call `ActivateNotify`/`ActivateIntegrationConfig`.
+   see the credentials JSON shape in [Step 2 above](#step-2-set-up-credentials-deploy-time-not-code).
+3. Stand up the consumer's `IVNic` the way its `main.go` does, so l8common activates `Notify`/`IntegCfg`.
 4. `POST /<prefix>/78/IntegCfg` an SMTP `IntegrationConfig` row (`type: SMTP`, `credentialKey: "smtp"`, host/port
    pointed at the catcher).
 5. `POST /<prefix>/78/Notify` with `channel: EMAIL`, assert `status: DELIVERY_STATUS_SENT`; `GET
