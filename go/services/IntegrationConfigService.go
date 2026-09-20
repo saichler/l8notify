@@ -18,10 +18,12 @@ const (
 // Unlike NotifyRecord, IntegrationConfig is fully editable — rows are created,
 // updated, and deleted by an admin, not auto-generated as a delivery log.
 func ActivateIntegrationConfig(creds, dbname string, vnic ifs.IVNic) {
-	common.ActivateService(common.ServiceConfig{
-		ServiceName: IntegrationServiceName, ServiceArea: NotifyServiceArea,
-		PrimaryKey: "IntegrationId", Callback: &IntegrationConfigCallback{},
-	}, &ntf.IntegrationConfig{}, &ntf.IntegrationConfigList{}, creds, dbname, vnic)
+	sla := common.NewOrmSLA(IntegrationServiceName, NotifyServiceArea, "IntegrationId",
+		&IntegrationConfigCallback{}, &ntf.IntegrationConfig{}, &ntf.IntegrationConfigList{})
+	// Name is the logical identity every lookup uses (GetIntegrationConfig("smtp")),
+	// so it is a unique key alongside the generated IntegrationId primary key.
+	sla.SetUniqueKeys("Name")
+	common.ActivateService(sla, creds, dbname, vnic)
 }
 
 type IntegrationConfigCallback struct{}

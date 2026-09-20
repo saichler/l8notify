@@ -21,14 +21,13 @@ const NotifyServiceName = "Notify"
 // IntegrationConfig, NotifyRecord is immutable and actively dispatches
 // (email/webhook/Slack) inside Before(POST) before persisting the outcome.
 func ActivateNotify(creds, dbname string, vnic ifs.IVNic) {
-	common.ActivateService(common.ServiceConfig{
-		ServiceName: NotifyServiceName, ServiceArea: NotifyServiceArea,
-		PrimaryKey: "NotifyId", Voter: true, NonUniqueKeys: []string{"RequestedAt"},
-		Replication: boolPtr(false), Callback: &NotifyCallback{},
-	}, &ntf.NotifyRecord{}, &ntf.NotifyRecordList{}, creds, dbname, vnic)
+	sla := common.NewOrmSLA(NotifyServiceName, NotifyServiceArea, "NotifyId", &NotifyCallback{},
+		&ntf.NotifyRecord{}, &ntf.NotifyRecordList{})
+	sla.SetVoter(true)
+	sla.SetNonUniqueKeys("RequestedAt")
+	sla.SetReplication(false)
+	common.ActivateService(sla, creds, dbname, vnic)
 }
-
-func boolPtr(b bool) *bool { return &b }
 
 type NotifyCallback struct{}
 
