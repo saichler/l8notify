@@ -53,7 +53,7 @@ func (this *NotifyCallback) Before(elem interface{}, action ifs.Action, isNotifi
 		target := &ntf.NotifyTarget{Channel: record.Channel, Endpoint: record.Endpoint, Template: record.Template}
 		smtpCfg := resolveSmtpConfig(vnic)
 		webhookSecrets := resolveWebhookSecrets(vnic)
-		result := channel.Dispatch(target, record.Message, smtpCfg, webhookSecrets)
+		result := channel.Dispatch(target, record.Subject, record.Message, smtpCfg, webhookSecrets)
 
 		record.Status = result.Status
 		record.HttpStatus = result.HttpStatus

@@ -26,9 +26,11 @@ func RegisterCustomSender(name string, sender Sender) {
 }
 
 // Dispatch sends a message to a NotifyTarget using the appropriate channel.
-// smtpCfg may be nil if no SMTP is configured (email sends will fail gracefully).
-// webhookSecrets maps endpoint URLs to HMAC secrets (may be nil).
-func Dispatch(target *ntf.NotifyTarget, message string, smtpCfg *ntf.SmtpConfig,
+// subject is used by the channels that have one (email); channels without a
+// subject ignore it. smtpCfg may be nil if no SMTP is configured (email sends
+// will fail gracefully). webhookSecrets maps endpoint URLs to HMAC secrets
+// (may be nil).
+func Dispatch(target *ntf.NotifyTarget, subject, message string, smtpCfg *ntf.SmtpConfig,
 	webhookSecrets map[string]string) *ntf.DeliveryResult {
 	if target == nil {
 		return &ntf.DeliveryResult{
@@ -62,7 +64,10 @@ func Dispatch(target *ntf.NotifyTarget, message string, smtpCfg *ntf.SmtpConfig,
 				SentAt:       time.Now().Unix(),
 			}
 		}
-		return SendEmail(smtpCfg, target.Endpoint, "Notification", message)
+		if subject == "" {
+			subject = "Notification"
+		}
+		return SendEmail(smtpCfg, target.Endpoint, subject, message)
 
 	case ntf.NotifyChannel_NOTIFY_CHANNEL_SLACK:
 		return SendSlack(target.Endpoint, message)

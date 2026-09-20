@@ -43,7 +43,7 @@ func TestRegisterCustomSender_AndDispatch(t *testing.T) {
 		Endpoint: "custom://test",
 	}
 
-	result := Dispatch(target, "hello custom", nil, nil)
+	result := Dispatch(target, "", "hello custom", nil, nil)
 	if result.Status != ntf.DeliveryStatus_DELIVERY_STATUS_SENT {
 		t.Errorf("expected SENT, got %v", result.Status)
 	}
@@ -76,7 +76,7 @@ func TestDispatchCustom_NoSenders(t *testing.T) {
 // --- Dispatch Routing Tests ---
 
 func TestDispatch_NilTarget(t *testing.T) {
-	result := Dispatch(nil, "msg", nil, nil)
+	result := Dispatch(nil, "", "msg", nil, nil)
 	if result.Status != ntf.DeliveryStatus_DELIVERY_STATUS_FAILED {
 		t.Errorf("expected FAILED for nil target, got %v", result.Status)
 	}
@@ -90,7 +90,7 @@ func TestDispatch_EmailNoSmtp(t *testing.T) {
 		Channel:  ntf.NotifyChannel_NOTIFY_CHANNEL_EMAIL,
 		Endpoint: "user@example.com",
 	}
-	result := Dispatch(target, "test email", nil, nil)
+	result := Dispatch(target, "", "test email", nil, nil)
 	if result.Status != ntf.DeliveryStatus_DELIVERY_STATUS_FAILED {
 		t.Errorf("expected FAILED without SMTP config, got %v", result.Status)
 	}
@@ -101,7 +101,7 @@ func TestDispatch_PagerDutyNotImplemented(t *testing.T) {
 		Channel:  ntf.NotifyChannel_NOTIFY_CHANNEL_PAGERDUTY,
 		Endpoint: "pagerduty-key",
 	}
-	result := Dispatch(target, "test", nil, nil)
+	result := Dispatch(target, "", "test", nil, nil)
 	if result.Status != ntf.DeliveryStatus_DELIVERY_STATUS_FAILED {
 		t.Errorf("expected FAILED for PagerDuty, got %v", result.Status)
 	}
@@ -112,7 +112,7 @@ func TestDispatch_UnknownChannel(t *testing.T) {
 		Channel:  99,
 		Endpoint: "somewhere",
 	}
-	result := Dispatch(target, "test", nil, nil)
+	result := Dispatch(target, "", "test", nil, nil)
 	if result.Status != ntf.DeliveryStatus_DELIVERY_STATUS_FAILED {
 		t.Errorf("expected FAILED for unknown channel, got %v", result.Status)
 	}
@@ -133,7 +133,7 @@ func TestDispatch_WebhookSimple(t *testing.T) {
 		Channel:  ntf.NotifyChannel_NOTIFY_CHANNEL_WEBHOOK,
 		Endpoint: server.URL,
 	}
-	result := Dispatch(target, "hello webhook", nil, nil)
+	result := Dispatch(target, "", "hello webhook", nil, nil)
 	if result.Status != ntf.DeliveryStatus_DELIVERY_STATUS_SENT {
 		t.Errorf("expected SENT, got %v: %s", result.Status, result.ErrorMessage)
 	}
@@ -155,7 +155,7 @@ func TestDispatch_WebhookWithHmac(t *testing.T) {
 		Channel:  ntf.NotifyChannel_NOTIFY_CHANNEL_WEBHOOK,
 		Endpoint: server.URL,
 	}
-	result := Dispatch(target, "signed message", nil, secrets)
+	result := Dispatch(target, "", "signed message", nil, secrets)
 	if result.Status != ntf.DeliveryStatus_DELIVERY_STATUS_SENT {
 		t.Errorf("expected SENT, got %v: %s", result.Status, result.ErrorMessage)
 	}
@@ -239,7 +239,7 @@ func TestDispatch_Slack(t *testing.T) {
 		Channel:  ntf.NotifyChannel_NOTIFY_CHANNEL_SLACK,
 		Endpoint: server.URL,
 	}
-	result := Dispatch(target, "slack message", nil, nil)
+	result := Dispatch(target, "", "slack message", nil, nil)
 	if result.Status != ntf.DeliveryStatus_DELIVERY_STATUS_SENT {
 		t.Errorf("expected SENT, got %v: %s", result.Status, result.ErrorMessage)
 	}
